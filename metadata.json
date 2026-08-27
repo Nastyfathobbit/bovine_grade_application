@@ -1,0 +1,6 @@
+{
+  "name": "BovineGrade - Production Cattle Assessor",
+  "description": "Mobile-ready research data collection tool for veterinarians to score production cattle traits using 1-10 snapping sliders with PP3 to PP1 extremity definitions.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
