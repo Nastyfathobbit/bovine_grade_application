@@ -1,5 +1,5 @@
-import React, { useId } from 'react';
-import { motion } from 'motion/react';
+import React, { useRef, useCallback } from 'react';
+import { triggerHapticSnap } from '../utils/haptics';
 
 interface SnappingSliderProps {
   value: number | undefined; // 1 to 10 or undefined
@@ -15,63 +15,124 @@ export const SnappingSlider: React.FC<SnappingSliderProps> = ({
   onChange,
   pp3Label,
   pp1Label,
+  traitName,
 }) => {
-  const inputId = useId();
-  const currentValue = value ?? 5; // Default display anchor if unset
+  const barRef = useRef<HTMLDivElement>(null);
+  const isDraggingRef = useRef<boolean>(false);
+  const lastStepRef = useRef<number | undefined>(value);
 
-  const handleSliderChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newVal = parseInt(e.target.value, 10);
-    if (!isNaN(newVal)) {
-      if (typeof navigator !== 'undefined' && navigator.vibrate) {
-        try {
-          navigator.vibrate(8);
-        } catch {
-          // Ignore
-        }
+  // Keep lastStepRef synchronized with props
+  lastStepRef.current = value;
+
+  // Calculates which step (1 to 10) corresponds to a given horizontal pointer position
+  const getStepFromPointer = useCallback((clientX: number): number => {
+    if (!barRef.current) return 5;
+    const rect = barRef.current.getBoundingClientRect();
+    const relativeX = clientX - rect.left;
+    const fraction = Math.max(0, Math.min(1, relativeX / rect.width));
+    // 10 distinct segments: 0..0.1 -> 1, 0.1..0.2 -> 2, ..., 0.9..1.0 -> 10
+    const step = Math.min(10, Math.max(1, Math.floor(fraction * 10) + 1));
+    return step;
+  }, []);
+
+  const selectStep = useCallback(
+    (step: number, notifyHaptic = true) => {
+      if (step < 1 || step > 10) return;
+      if (notifyHaptic && step !== lastStepRef.current) {
+        triggerHapticSnap(step === 1 || step === 10 ? 'medium' : 'light');
       }
-      onChange(newVal);
+      lastStepRef.current = step;
+      onChange(step);
+    },
+    [onChange]
+  );
+
+  // Pointer event handlers for smooth sliding across buttons
+  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    // Only respond to primary touch/mouse button
+    if (e.button !== 0) return;
+
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {
+      // Best-effort pointer capture
+    }
+
+    isDraggingRef.current = true;
+    const step = getStepFromPointer(e.clientX);
+    selectStep(step, true);
+  };
+
+  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!isDraggingRef.current) return;
+    const step = getStepFromPointer(e.clientX);
+    if (step !== lastStepRef.current) {
+      selectStep(step, true);
     }
   };
 
-  const handleStepClick = (step: number) => {
-    if (typeof navigator !== 'undefined' && navigator.vibrate) {
-      try {
-        navigator.vibrate(10);
-      } catch {
-        // Ignore
+  const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    isDraggingRef.current = false;
+    try {
+      if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+        e.currentTarget.releasePointerCapture(e.pointerId);
       }
+    } catch {
+      // Ignore
     }
-    onChange(step);
   };
 
-  // Compute solid color based on score (No green at low scores like 3)
-  const getScoreColorHex = (score: number) => {
-    if (score >= 8) return '#059669'; // Emerald
-    if (score >= 6) return '#0d9488'; // Teal
-    if (score >= 4) return '#d97706'; // Amber
-    return '#e11d48'; // Rose/Red (1-3)
-  };
-
-  const getScoreBadgeClass = (score: number) => {
-    if (score >= 8) return 'bg-emerald-600 text-white';
-    if (score >= 6) return 'bg-teal-600 text-white';
-    if (score >= 4) return 'bg-amber-600 text-white';
-    return 'bg-rose-600 text-white';
+  // Keyboard accessibility handler
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    const current = value ?? 5;
+    if (e.key === 'ArrowRight' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      const next = Math.min(10, current + 1);
+      selectStep(next, true);
+    } else if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') {
+      e.preventDefault();
+      const prev = Math.max(1, current - 1);
+      selectStep(prev, true);
+    } else if (e.key === 'Home') {
+      e.preventDefault();
+      selectStep(1, true);
+    } else if (e.key === 'End') {
+      e.preventDefault();
+      selectStep(10, true);
+    } else if (e.key >= '1' && e.key <= '9') {
+      selectStep(parseInt(e.key, 10), true);
+    } else if (e.key === '0') {
+      selectStep(10, true);
+    }
   };
 
   const isScored = value !== undefined;
 
+  const getScoreBadgeColor = (val: number) => {
+    if (val >= 8) return 'bg-emerald-600 text-white border-emerald-600 shadow-md ring-2 ring-emerald-300 dark:ring-emerald-800';
+    if (val >= 6) return 'bg-teal-600 text-white border-teal-600 shadow-md ring-2 ring-teal-300 dark:ring-teal-800';
+    if (val >= 4) return 'bg-amber-600 text-white border-amber-600 shadow-md ring-2 ring-amber-300 dark:ring-amber-800';
+    return 'bg-rose-600 text-white border-rose-600 shadow-md ring-2 ring-rose-300 dark:ring-rose-800';
+  };
+
+  const getScoreSummaryLabel = (val: number) => {
+    if (val >= 8) return 'PP1 (Upper Tier)';
+    if (val >= 6) return 'PP2+ (Above Neutral)';
+    if (val >= 4) return 'PP2- (Below Neutral)';
+    return 'PP3 (Lower Extremity)';
+  };
+
   return (
     <div className="w-full select-none">
-      {/* Category Labels Banner (Without "extremity" text) */}
-      <div className="grid grid-cols-2 gap-2 mb-2.5">
-        {/* Left - Score 1 (PP3) */}
+      {/* Category Labels Banner (Extremity Reference Buttons) */}
+      <div className="grid grid-cols-2 gap-2 mb-2">
+        {/* Left - Score 1 (PP3 Extremity) */}
         <button
           type="button"
-          onClick={() => handleStepClick(1)}
+          onClick={() => selectStep(1, true)}
           className={`flex items-start gap-1.5 p-2 rounded-lg text-left transition-all border ${
             value === 1
-              ? 'bg-rose-50 border-rose-400 dark:bg-rose-950/40 dark:border-rose-700 shadow-xs'
+              ? 'bg-rose-50 border-rose-400 dark:bg-rose-950/40 dark:border-rose-700 shadow-xs ring-1 ring-rose-300 dark:ring-rose-800'
               : 'bg-stone-50 hover:bg-stone-100 border-stone-200 dark:bg-stone-900/60 dark:border-stone-800'
           }`}
         >
@@ -88,13 +149,13 @@ export const SnappingSlider: React.FC<SnappingSliderProps> = ({
           </div>
         </button>
 
-        {/* Right - Score 10 (PP1) */}
+        {/* Right - Score 10 (PP1 Extremity) */}
         <button
           type="button"
-          onClick={() => handleStepClick(10)}
+          onClick={() => selectStep(10, true)}
           className={`flex items-start justify-end gap-1.5 p-2 rounded-lg text-right transition-all border ${
             value === 10
-              ? 'bg-emerald-50 border-emerald-400 dark:bg-emerald-950/40 dark:border-emerald-700 shadow-xs'
+              ? 'bg-emerald-50 border-emerald-400 dark:bg-emerald-950/40 dark:border-emerald-700 shadow-xs ring-1 ring-emerald-300 dark:ring-emerald-800'
               : 'bg-stone-50 hover:bg-stone-100 border-stone-200 dark:bg-stone-900/60 dark:border-stone-800'
           }`}
         >
@@ -112,84 +173,64 @@ export const SnappingSlider: React.FC<SnappingSliderProps> = ({
         </button>
       </div>
 
-      {/* Main Snapping Slider Track Area - aligned with button columns (5% to 95%) */}
-      <div className="relative pt-1 pb-2 px-[5%] touch-slider-control">
-        <div className="relative touch-slider-control">
-          {/* Visual Track bar */}
-          <div className="relative h-3.5 w-full rounded-full bg-stone-200 dark:bg-stone-800 overflow-hidden shadow-inner touch-none">
-            {isScored && (
-              <div
-                className="absolute left-0 top-0 bottom-0 transition-all duration-150 rounded-full pointer-events-none"
-                style={{
-                  width: `${((currentValue - 1) / 9) * 100}%`,
-                  backgroundColor: getScoreColorHex(currentValue),
-                }}
-              />
-            )}
-          </div>
-
-          {/* Hidden Range Input overlay matching exact track width */}
-          <input
-            id={inputId}
-            type="range"
-            min="1"
-            max="10"
-            step="1"
-            value={currentValue}
-            onChange={handleSliderChange}
-            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10 touch-slider-control touch-none"
-            style={{ touchAction: 'none' }}
-            aria-label={`Score from 1 (${pp3Label}) to 10 (${pp1Label})`}
-          />
-
-          {/* Active Thumb Pin Indicator */}
-          {isScored && (
-            <motion.div
-              layout
-              transition={{ type: 'spring', stiffness: 500, damping: 30 }}
-              className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 pointer-events-none z-0"
-              style={{
-                left: `${((currentValue - 1) / 9) * 100}%`,
-              }}
-            >
-              <div
-                className={`w-6 h-6 rounded-full border-2 border-white dark:border-stone-900 shadow-md flex items-center justify-center text-xs font-bold ${getScoreBadgeClass(
-                  currentValue
-                )}`}
-              >
-                {currentValue}
-              </div>
-            </motion.div>
-          )}
-        </div>
-      </div>
-
-      {/* 1-10 Discrete Quick-Tap Buttons */}
-      <div className="grid grid-cols-10 gap-1 mt-1">
+      {/* Slidable 1-10 Buttons Bar (Tap or Slide across to Snap) */}
+      <div
+        ref={barRef}
+        role="slider"
+        aria-valuemin={1}
+        aria-valuemax={10}
+        aria-valuenow={value ?? 5}
+        aria-label={traitName ? `${traitName} score` : 'Trait score (1 to 10)'}
+        tabIndex={0}
+        onKeyDown={handleKeyDown}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerUp}
+        className="relative grid grid-cols-10 gap-1 p-1 bg-stone-100 dark:bg-stone-800/80 rounded-xl border border-stone-200 dark:border-stone-700/60 touch-none select-none cursor-ew-resize focus:outline-hidden focus:ring-2 focus:ring-emerald-500"
+        style={{ touchAction: 'none' }}
+      >
         {Array.from({ length: 10 }, (_, i) => i + 1).map((step) => {
           const isSelected = value === step;
-          let stepBg = 'bg-stone-100 hover:bg-stone-200 text-stone-700 dark:bg-stone-800 dark:hover:bg-stone-700 dark:text-stone-300';
-          if (isSelected) {
-            if (step >= 8) stepBg = 'bg-emerald-600 text-white font-bold shadow-xs scale-105';
-            else if (step >= 6) stepBg = 'bg-teal-600 text-white font-bold shadow-xs scale-105';
-            else if (step >= 4) stepBg = 'bg-amber-600 text-white font-bold shadow-xs scale-105';
-            else stepBg = 'bg-rose-600 text-white font-bold shadow-xs scale-105';
-          }
 
           return (
-            <button
+            <div
               key={step}
-              type="button"
-              onClick={() => handleStepClick(step)}
-              className={`h-8 sm:h-9 rounded-md flex flex-col items-center justify-center text-xs transition-transform active:scale-95 ${stepBg}`}
-              title={`Score ${step}`}
+              data-step={step}
+              className={`h-11 sm:h-12 rounded-lg flex flex-col items-center justify-center transition-all duration-100 relative ${
+                isSelected
+                  ? `${getScoreBadgeColor(step)} z-10 scale-[1.05]`
+                  : 'bg-white dark:bg-stone-900/90 text-stone-700 dark:text-stone-300 border border-stone-200/70 dark:border-stone-800 hover:bg-stone-50 dark:hover:bg-stone-800'
+              }`}
             >
-              <span className="font-semibold">{step}</span>
-              {step === 1 && <span className="text-[8px] opacity-70 leading-none">PP3</span>}
-              {step === 10 && <span className="text-[8px] opacity-70 leading-none">PP1</span>}
-            </button>
+              <span className={`text-sm sm:text-base leading-none ${isSelected ? 'font-black' : 'font-semibold'}`}>
+                {step}
+              </span>
+              {step === 1 && (
+                <span className={`text-[8px] mt-0.5 leading-none ${isSelected ? 'text-white/90 font-bold' : 'text-stone-400'}`}>
+                  PP3
+                </span>
+              )}
+              {step === 10 && (
+                <span className={`text-[8px] mt-0.5 leading-none ${isSelected ? 'text-white/90 font-bold' : 'text-stone-400'}`}>
+                  PP1
+                </span>
+              )}
+            </div>
           );
         })}
+      </div>
+
+      {/* Dynamic Status & Guidance Footer */}
+      <div className="flex items-center justify-between text-[11px] px-1 mt-1.5 text-stone-500 dark:text-stone-400">
+        <span className="flex items-center gap-1">
+          <span className="text-[10px] uppercase font-bold text-stone-400">Slide or tap 1-10</span>
+        </span>
+        {isScored && (
+          <span className="font-semibold text-stone-700 dark:text-stone-300">
+            Selected: <span className="font-bold">{value}</span> ({getScoreSummaryLabel(value)})
+          </span>
+        )}
       </div>
     </div>
   );
