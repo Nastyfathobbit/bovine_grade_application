@@ -83,7 +83,11 @@ export const RecordsList: React.FC<RecordsListProps> = ({
     list.sort((a, b) => {
       if (sortBy === 'date_desc') return b.timestamp - a.timestamp;
       if (sortBy === 'date_asc') return a.timestamp - b.timestamp;
-      if (sortBy === 'id') return a.cowId.localeCompare(b.cowId);
+      if (sortBy === 'id')
+        return a.cowId.localeCompare(b.cowId, undefined, {
+          numeric: true,
+          sensitivity: 'base',
+        });
 
       if (sortBy === 'most_scored') {
         const aCount = Object.keys(a.traitScores || {}).length;
@@ -222,7 +226,7 @@ export const RecordsList: React.FC<RecordsListProps> = ({
               type="text"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Search by Cow ID, Assessor, notes, PP grade..."
+              placeholder="Search by Sequential ID, Actual Animal ID, PP grade, notes..."
               className="w-full pl-9 pr-3 py-2 text-xs font-medium rounded-xl border border-stone-300 dark:border-stone-700 bg-stone-50 dark:bg-stone-800 text-stone-900 dark:text-stone-100 placeholder:text-stone-400"
             />
             {searchTerm && (
@@ -245,7 +249,7 @@ export const RecordsList: React.FC<RecordsListProps> = ({
             >
               <option value="date_desc">Newest First</option>
               <option value="date_asc">Oldest First</option>
-              <option value="id">Cow ID (A-Z)</option>
+              <option value="id">Sequential ID (01 → 99)</option>
               <option value="pp_category">Production Profile (PP1 to PP3)</option>
               <option value="most_scored">Most Scored Traits</option>
             </select>
@@ -316,7 +320,7 @@ export const RecordsList: React.FC<RecordsListProps> = ({
           <p className="text-xs text-stone-500 max-w-sm mx-auto">
             {searchTerm
               ? `No records matching "${searchTerm}". Try a different search term.`
-              : 'Begin scoring your herd with the 1-10 snapping slider assessment form.'}
+              : 'Begin scoring your herd with the 1-10 slidable button bar assessment form.'}
           </p>
           <button
             type="button"
@@ -344,21 +348,25 @@ export const RecordsList: React.FC<RecordsListProps> = ({
                   {/* Top row: Cow ID and Final PP Category Badge */}
                   <div className="flex items-start justify-between gap-2">
                     <div>
-                      <h3 className="text-lg font-black text-stone-900 dark:text-stone-100 flex items-center gap-2">
-                        {rec.cowId}
-                      </h3>
-                      <div className="flex items-center gap-2 text-xs text-stone-500 dark:text-stone-400 mt-0.5 flex-wrap">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h3 className="text-lg font-black text-stone-900 dark:text-stone-100 flex items-center gap-1.5">
+                          <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 dark:bg-emerald-950/70 dark:text-emerald-300">
+                            Seq
+                          </span>
+                          <span>{rec.cowId}</span>
+                        </h3>
+                        {rec.dynamicValues?.['Feedlot ID'] && (
+                          <span className="text-xs font-bold px-2 py-0.5 rounded-md bg-stone-100 dark:bg-stone-800 text-stone-700 dark:text-stone-300 border border-stone-200 dark:border-stone-700">
+                            Tag: {rec.dynamicValues['Feedlot ID']}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 text-xs text-stone-500 dark:text-stone-400 mt-1 flex-wrap">
                         <span>{new Date(rec.timestamp).toLocaleDateString()}</span>
                         {rec.dynamicValues?.cow_weight && (
                           <>
                             <span>•</span>
                             <span>{rec.dynamicValues.cow_weight} kg</span>
-                          </>
-                        )}
-                        {rec.dynamicValues?.approximate_age && (
-                          <>
-                            <span>•</span>
-                            <span>{rec.dynamicValues.approximate_age}</span>
                           </>
                         )}
                       </div>

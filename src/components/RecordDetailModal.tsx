@@ -92,9 +92,17 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
             </div>
             <div>
               <div className="flex items-center gap-2 flex-wrap">
-                <h2 className="text-xl font-black text-stone-900 dark:text-stone-100">
-                  {record.cowId}
+                <h2 className="text-xl font-black text-stone-900 dark:text-stone-100 flex items-center gap-1.5">
+                  <span className="text-[11px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 dark:bg-emerald-950/70 dark:text-emerald-300">
+                    Seq
+                  </span>
+                  <span>{record.cowId}</span>
                 </h2>
+                {record.dynamicValues?.['Feedlot ID'] && (
+                  <span className="text-xs px-2 py-0.5 rounded-md bg-stone-100 dark:bg-stone-800 text-stone-700 dark:text-stone-300 font-bold border border-stone-200 dark:border-stone-700">
+                    Animal ID: {record.dynamicValues['Feedlot ID']}
+                  </span>
+                )}
                 {record.finalProductionCategory ? (
                   <span
                     className={`text-xs px-2.5 py-0.5 rounded-md font-bold border ${getProfileBadgeStyle(

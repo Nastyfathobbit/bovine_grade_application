@@ -19,6 +19,8 @@ import {
 
 interface AssessmentFormProps {
   initialRecord?: CowRecord | null;
+  suggestedCowId?: string;
+  existingCowIds?: string[];
   dynamicFields: DynamicFieldDefinition[];
   onSaveRecord: (record: CowRecord, shouldNext: boolean) => void;
   onUpdateDynamicFields: (fields: DynamicFieldDefinition[]) => void;
@@ -64,12 +66,15 @@ const PRODUCTION_PROFILES: {
 
 export const AssessmentForm: React.FC<AssessmentFormProps> = ({
   initialRecord,
+  suggestedCowId = '01',
+  existingCowIds = [],
   dynamicFields,
   onSaveRecord,
   onUpdateDynamicFields,
   onOpenReferenceGuide,
 }) => {
-  const [cowId, setCowId] = useState(initialRecord?.cowId || '');
+  const [cowId, setCowId] = useState(initialRecord?.cowId || suggestedCowId);
+  const [hasUserEditedCowId, setHasUserEditedCowId] = useState(Boolean(initialRecord));
   const [assessorName, setAssessorName] = useState(
     initialRecord?.assessorName || 'Dr. Production Vet'
   );
@@ -90,17 +95,26 @@ export const AssessmentForm: React.FC<AssessmentFormProps> = ({
   const [isFieldEditorOpen, setIsFieldEditorOpen] = useState(false);
   const [errorBanner, setErrorBanner] = useState<string | null>(null);
 
-  // Sync if initialRecord changes (e.g. edit mode)
+  // Sync if initialRecord changes (e.g. edit mode) or suggestedCowId updates before user edits
   useEffect(() => {
     if (initialRecord) {
       setCowId(initialRecord.cowId);
+      setHasUserEditedCowId(true);
       setAssessorName(initialRecord.assessorName || '');
       setNotes(initialRecord.notes || '');
       setTraitScores(initialRecord.traitScores || {});
       setDynamicValues(initialRecord.dynamicValues || {});
       setFinalProductionCategory(initialRecord.finalProductionCategory);
+    } else if (!hasUserEditedCowId) {
+      setCowId(suggestedCowId);
     }
-  }, [initialRecord]);
+  }, [initialRecord, suggestedCowId, hasUserEditedCowId]);
+
+  const isDuplicateCowId = useMemo(() => {
+    const trimmed = cowId.trim().toLowerCase();
+    if (!trimmed) return false;
+    return existingCowIds.some((id) => id.trim().toLowerCase() === trimmed);
+  }, [cowId, existingCowIds]);
 
   // Scoring statistics (Counts only, NO averages)
   const totalTraitsCount = TRAIT_DEFINITIONS.length;
@@ -163,7 +177,7 @@ export const AssessmentForm: React.FC<AssessmentFormProps> = ({
   const handleSave = (shouldNext: boolean) => {
     const trimmedId = cowId.trim();
     if (!trimmedId) {
-      setErrorBanner('Please enter a Cow ID before saving.');
+      setErrorBanner('Please enter a Sequential Cow ID before saving.');
       window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
     }
@@ -195,7 +209,7 @@ export const AssessmentForm: React.FC<AssessmentFormProps> = ({
     onSaveRecord(record, shouldNext);
 
     if (shouldNext) {
-      // Auto increment Cow ID if ending in digits (e.g., COW-101 -> COW-102)
+      // Auto increment Sequential Cow ID if ending in digits (e.g., 01 -> 02, COW-101 -> COW-102)
       let nextCowId = '';
       const match = trimmedId.match(/^(.*?)(\d+)$/);
       if (match) {
@@ -205,7 +219,17 @@ export const AssessmentForm: React.FC<AssessmentFormProps> = ({
         nextCowId = `${prefix}${padded}`;
       }
 
+      // Preserve session-level date fields (e.g. classification_date), clear per-animal fields (e.g. Actual Animal ID, Cow Weight)
+      const preservedDynamicValues: Record<string, string | number> = {};
+      dynamicFields.forEach((field) => {
+        if (field.type === 'date' && dynamicValues[field.id]) {
+          preservedDynamicValues[field.id] = dynamicValues[field.id];
+        }
+      });
+
       setCowId(nextCowId);
+      setHasUserEditedCowId(true);
+      setDynamicValues(preservedDynamicValues);
       setTraitScores({});
       setFinalProductionCategory(undefined);
       setNotes('');
@@ -242,15 +266,18 @@ export const AssessmentForm: React.FC<AssessmentFormProps> = ({
       {/* Primary Cow Identification Header */}
       <div className="bg-white dark:bg-stone-900 rounded-2xl p-4 sm:p-5 border border-stone-200 dark:border-stone-800 shadow-sm space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          {/* Cow ID Input */}
+          {/* Sequential Cow ID Input */}
           <div className="flex-1">
             <label
               htmlFor="cow-id-input"
-              className="block text-xs font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400 mb-1 flex items-center gap-1.5"
+              className="block text-xs font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400 mb-0.5 flex items-center gap-1.5"
             >
               <Tag className="w-3.5 h-3.5" />
-              Cow Identifier (Required)
+              Sequential Cow ID (Required)
             </label>
+            <p className="text-[11px] text-stone-500 dark:text-stone-400 mb-1.5">
+              Primary key for matching image data with animal records (auto-increments on Save & Next)
+            </p>
             <div className="relative">
               <input
                 id="cow-id-input"
@@ -258,21 +285,30 @@ export const AssessmentForm: React.FC<AssessmentFormProps> = ({
                 value={cowId}
                 onChange={(e) => {
                   setCowId(e.target.value);
+                  setHasUserEditedCowId(true);
                   if (errorBanner) setErrorBanner(null);
                 }}
-                placeholder="e.g. COW-104, B-8802, Ear Tag #..."
-                className="w-full text-lg sm:text-xl font-bold px-3.5 py-2.5 rounded-xl border-2 border-stone-300 focus:border-emerald-600 dark:border-stone-700 dark:focus:border-emerald-500 bg-stone-50/50 dark:bg-stone-800 text-stone-900 dark:text-stone-100 placeholder:text-stone-400"
+                placeholder="e.g. Sequential Cow ID 01, 02, ... 51"
+                className="w-full text-lg sm:text-xl font-bold px-3.5 py-2.5 pr-16 rounded-xl border-2 border-stone-300 focus:border-emerald-600 dark:border-stone-700 dark:focus:border-emerald-500 bg-stone-50/50 dark:bg-stone-800 text-stone-900 dark:text-stone-100 placeholder:text-stone-400"
               />
               {cowId && (
                 <button
                   type="button"
-                  onClick={() => setCowId('')}
+                  onClick={() => {
+                    setCowId('');
+                    setHasUserEditedCowId(true);
+                  }}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600 text-xs px-1.5 py-0.5 rounded-md bg-stone-200 dark:bg-stone-700"
                 >
                   Clear
                 </button>
               )}
             </div>
+            {isDuplicateCowId && (
+              <p className="mt-1 text-[11px] font-semibold text-amber-600 dark:text-amber-400">
+                Note: Sequential ID "{cowId.trim()}" already exists in saved records.
+              </p>
+            )}
           </div>
 
           {/* Quick Progress Badge */}
@@ -508,7 +544,12 @@ export const AssessmentForm: React.FC<AssessmentFormProps> = ({
           <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-start">
             <div className="min-w-0">
               <span className="text-[10px] uppercase font-bold text-stone-500 dark:text-stone-400 block truncate">
-                Cow: <span className="text-stone-900 dark:text-stone-100">{cowId || 'Untitled'}</span>
+                Seq ID: <span className="text-stone-900 dark:text-stone-100">{cowId || 'Untitled'}</span>
+                {dynamicValues['Feedlot ID'] ? (
+                  <span className="ml-2 text-stone-400 font-semibold">
+                    (Tag: <span className="text-stone-700 dark:text-stone-300">{dynamicValues['Feedlot ID']}</span>)
+                  </span>
+                ) : null}
               </span>
               <div className="flex items-center gap-2 text-xs">
                 <span className="font-semibold text-stone-700 dark:text-stone-300">

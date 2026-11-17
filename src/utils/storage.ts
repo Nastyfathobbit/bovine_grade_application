@@ -31,11 +31,58 @@ export function getStoredDynamicFields(): DynamicFieldDefinition[] {
     const raw = localStorage.getItem(DYNAMIC_FIELDS_STORAGE_KEY);
     if (!raw) return DEFAULT_DYNAMIC_FIELDS;
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : DEFAULT_DYNAMIC_FIELDS;
+    if (!Array.isArray(parsed)) return DEFAULT_DYNAMIC_FIELDS;
+
+    // Migrate legacy 'approximate_age' default field to the updated 'Feedlot ID' (Actual Animal ID) field
+    const hasFeedlotId = parsed.some((f) => f && f.id === 'Feedlot ID');
+    const hasLegacyAge = parsed.some((f) => f && f.id === 'approximate_age');
+    if (!hasFeedlotId && hasLegacyAge) {
+      const actualIdDefault = DEFAULT_DYNAMIC_FIELDS.find((f) => f.id === 'Feedlot ID');
+      if (actualIdDefault) {
+        const migrated = parsed.map((f) =>
+          f && f.id === 'approximate_age' ? actualIdDefault : f
+        );
+        saveStoredDynamicFields(migrated);
+        return migrated;
+      }
+    }
+
+    return parsed;
   } catch (err) {
     console.error('Failed to load dynamic fields from storage', err);
     return DEFAULT_DYNAMIC_FIELDS;
   }
+}
+
+export function getNextSequentialCowId(records: CowRecord[]): string {
+  const realRecords = records.filter((r) => !r.id.startsWith('demo-cow-'));
+  const source = realRecords.length > 0 ? realRecords : [];
+
+  if (source.length === 0) {
+    return '01';
+  }
+
+  let bestNum = 0;
+  let bestPrefix = '';
+  let bestPad = 2;
+
+  for (const rec of source) {
+    const match = rec.cowId.trim().match(/^(.*?)(\d+)$/);
+    if (match) {
+      const num = parseInt(match[2], 10);
+      if (num >= bestNum) {
+        bestNum = num;
+        bestPrefix = match[1];
+        bestPad = Math.max(2, match[2].length);
+      }
+    }
+  }
+
+  if (bestNum === 0) {
+    return '01';
+  }
+
+  return `${bestPrefix}${String(bestNum + 1).padStart(bestPad, '0')}`;
 }
 
 export function saveStoredDynamicFields(fields: DynamicFieldDefinition[]): void {
@@ -78,7 +125,7 @@ export function exportRecordsToCSV(
   // Build CSV Header (clean research structure without averages)
   const headers = [
     'Record_UUID',
-    'Cow_ID',
+    'Sequential_Cow_ID',
     'Final_Production_Profile',
     'Timestamp',
     'Assessor_Name',
@@ -135,14 +182,14 @@ function getInitialDemoRecords(): CowRecord[] {
   return [
     {
       id: 'demo-cow-1',
-      cowId: 'B-8802',
+      cowId: '01',
       finalProductionCategory: 'PP1',
       timestamp: Date.now() - 86400000 * 2,
       assessorName: 'Dr. Van Der Merwe, DVM',
       dynamicValues: {
         classification_date: new Date(Date.now() - 86400000 * 2).toISOString().split('T')[0],
         cow_weight: 620,
-        approximate_age: '4.5 years',
+        'Feedlot ID': 'B-8802',
       },
       traitScores: {
         shoulder_convexity: 9,
@@ -184,14 +231,14 @@ function getInitialDemoRecords(): CowRecord[] {
     },
     {
       id: 'demo-cow-2',
-      cowId: 'SA-4019',
+      cowId: '02',
       finalProductionCategory: 'PP2+',
       timestamp: Date.now() - 86400000,
       assessorName: 'Dr. Van Der Merwe, DVM',
       dynamicValues: {
         classification_date: new Date(Date.now() - 86400000).toISOString().split('T')[0],
         cow_weight: 485,
-        approximate_age: '2.8 years',
+        'Feedlot ID': 'SA-4019',
       },
       traitScores: {
         shoulder_convexity: 5,

@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { DynamicFieldDefinition, FieldType } from '../types';
-import { Plus, Trash2, X, Settings2, Check, ArrowDown, ArrowUp } from 'lucide-react';
+import { DEFAULT_DYNAMIC_FIELDS } from '../data/defaultFields';
+import { Plus, Trash2, X, Settings2, Check, ArrowDown, ArrowUp, RotateCcw } from 'lucide-react';
 
 interface DynamicFieldEditorModalProps {
   isOpen: boolean;
@@ -20,6 +21,12 @@ export const DynamicFieldEditorModal: React.FC<DynamicFieldEditorModalProps> = (
   const [newType, setNewType] = useState<FieldType>('text');
   const [newUnit, setNewUnit] = useState('');
   const [newPlaceholder, setNewPlaceholder] = useState('');
+
+  useEffect(() => {
+    if (isOpen) {
+      setLocalFields(fields);
+    }
+  }, [fields, isOpen]);
 
   if (!isOpen) return null;
 
@@ -87,7 +94,7 @@ export const DynamicFieldEditorModal: React.FC<DynamicFieldEditorModalProps> = (
                 Manage Dynamic Record Fields
               </h2>
               <p className="text-xs text-stone-500 dark:text-stone-400">
-                Add, delete, or reorder dynamic metadata (Cow ID is permanent).
+                Add, delete, or reorder dynamic metadata (Sequential Cow ID is permanent).
               </p>
             </div>
           </div>
@@ -102,14 +109,14 @@ export const DynamicFieldEditorModal: React.FC<DynamicFieldEditorModalProps> = (
 
         {/* Modal Body */}
         <div className="p-4 overflow-y-auto space-y-4 flex-1">
-          {/* Permanent Cow ID note */}
+          {/* Permanent Sequential Cow ID note */}
           <div className="p-3 rounded-xl bg-stone-100 dark:bg-stone-800/80 border border-stone-200 dark:border-stone-700/60 flex items-center justify-between">
             <div>
               <span className="text-xs font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
                 Core Primary Key
               </span>
               <p className="text-sm font-semibold text-stone-900 dark:text-stone-100">
-                Cow ID (Ear tag / Barcode / Tattoo)
+                Sequential Cow ID (Image & Record Matching)
               </p>
             </div>
             <span className="text-xs font-semibold px-2 py-1 bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-300 rounded-md">
@@ -119,9 +126,20 @@ export const DynamicFieldEditorModal: React.FC<DynamicFieldEditorModalProps> = (
 
           {/* Current Dynamic Fields List */}
           <div className="space-y-2">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-stone-500 dark:text-stone-400">
-              Configured Dynamic Fields ({localFields.length})
-            </h3>
+            <div className="flex items-center justify-between">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-stone-500 dark:text-stone-400">
+                Configured Dynamic Fields ({localFields.length})
+              </h3>
+              <button
+                type="button"
+                onClick={() => setLocalFields(DEFAULT_DYNAMIC_FIELDS)}
+                className="text-[11px] font-semibold text-stone-500 hover:text-emerald-700 dark:hover:text-emerald-400 flex items-center gap-1"
+                title="Restore default fields"
+              >
+                <RotateCcw className="w-3 h-3" />
+                Reset Defaults
+              </button>
+            </div>
             {localFields.length === 0 ? (
               <p className="text-sm text-stone-500 italic p-3 text-center border border-dashed rounded-xl border-stone-300 dark:border-stone-700">
                 No optional metadata fields. Only Cow ID and trait scores will be gathered.

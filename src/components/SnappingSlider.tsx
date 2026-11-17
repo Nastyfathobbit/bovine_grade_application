@@ -49,8 +49,8 @@ export const SnappingSlider: React.FC<SnappingSliderProps> = ({
 
   // Pointer event handlers for smooth sliding across buttons
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    // Only respond to primary touch/mouse button
-    if (e.button !== 0) return;
+    // Only respond to primary touch/pen/mouse pointer
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
 
     try {
       e.currentTarget.setPointerCapture(e.pointerId);

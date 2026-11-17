@@ -5,7 +5,9 @@ import {
   saveStoredRecords,
   getStoredDynamicFields,
   saveStoredDynamicFields,
+  getNextSequentialCowId,
 } from './utils/storage';
+import { initHaptics } from './utils/haptics';
 import { Header } from './components/Header';
 import { AssessmentForm } from './components/AssessmentForm';
 import { RecordsList } from './components/RecordsList';
@@ -24,8 +26,9 @@ export default function App() {
   const [isFieldEditorOpen, setIsFieldEditorOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  // Initialize from storage
+  // Initialize from storage & pre-mount iOS haptic trigger
   useEffect(() => {
+    initHaptics();
     const loadedRecords = getStoredRecords();
     const loadedFields = getStoredDynamicFields();
     setRecords(loadedRecords);
@@ -129,6 +132,10 @@ export default function App() {
         {activeTab === 'grade' && (
           <AssessmentForm
             initialRecord={editingRecord}
+            suggestedCowId={getNextSequentialCowId(records)}
+            existingCowIds={records
+              .filter((r) => !editingRecord || r.id !== editingRecord.id)
+              .map((r) => r.cowId)}
             dynamicFields={dynamicFields}
             onSaveRecord={handleSaveRecord}
             onUpdateDynamicFields={handleUpdateDynamicFields}

@@ -18,10 +18,10 @@ export const DEFAULT_DYNAMIC_FIELDS: DynamicFieldDefinition[] = [
     enabled: true,
   },
   {
-    id: 'approximate_age',
-    label: 'Approximate Age',
+    id: 'Feedlot ID',
+    label: 'Actual Animal ID',
     type: 'text',
-    placeholder: 'e.g. 3.5 years / 42 mo',
+    placeholder: 'Animal Ear Tag ID',
     required: false,
     enabled: true,
   },
